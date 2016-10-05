@@ -1,0 +1,29 @@
+# How does Xen support existing I/O device drivers?
+
+比较复杂，但是长话短说。在 Xen 1.0 的时候，解决驱动支持问题是放在 Xen 的 hypervisor 中的，这意味着所有的驱动都必须在 Xen 中支持，而且大部分驱动都是给 Linux 写的，还需要进行改造。
+
+后来在 Xen 2.0 以及之后，引入了一个特权虚拟机，Domain 0，是一个 Linux 虚拟机，但是系统是经过改造的，运行在 ring1。这个虚拟机是为了解决驱动问题。现在所有的驱动都放在 Domain 0 中，这样大大减少了 Xen 的代码量。
+
+所有的除了 Domain 0 之外的虚拟机，都只有由 Xen 提供的虚拟的驱动，可以被当做是 Domain 0 中的驱动程序的前端程序，所有请求都会经过 Xen 的 IO Ring 传递给 Domain 0 的后端驱动程序来处理。对于每个虚拟机而言，Domain 0 中都有一个与之对应的后端驱动程序，但一共只有一个真正的驱动程序。
+
+就是通过这样的方式，实现了对 IO 的虚拟化和复用。
+
+# How does Xen ensure I/O isolation? What happen if a VM wants to access block owned by another VM?
+
+VBD 和 VIF 是进行 IO 的隔离的。首先对于 IO 的访问，都是通过 IO Ring 来进行的。
+
+VIF 就像是网卡：具有两个 IO 缓冲区描述符环，一个用于发送，一个用于接收。在每个方向上都有一些相关的规则形式（<模式>，<动作>）— 如果模式（pattern）匹配上的话，那么相关的动作（action）就会被起用。在发送和接收的时候，都会检查规则，来确定是哪个 VIF 发起的。
+
+VBD 是由一些和所有权以及访问控制信息相关的扩展组成的。在 Xen 内部为每个 VBD 维护了一个转换表，整个表中的内容都由 Domain 0 进行管理。在接收到一个磁盘请求后，Xen 检查 VBD 标识符和偏移，并且产生相应的扇区地址和所属物理设备。与隔离性相关的检查也是在这个时候进行的。**如果一个虚拟机访问了非法的块，在这一步就会被检查出来。**
+
+可以说，隔离也是在 Domain 0 来做的。
+
+# What is Intel VT-x? How does it change the design of Xen?
+
+Intel VT-x 是 CPU 的新 feature，是因特尔为了更好地支持虚拟化，而对硬件进行的改造。Intel VT-x 为 CPU 制定了 Root 和 non-Root 模式，而且两种模式可以相互切换，不需要软件来处理上下文问题。
+
+有 Intel VT-x 前，由虚拟机 Trap 到 Xen 的时候，需要实现 Hypercall。而这样只能去修改操作系统内核，实现的代码量很大。而有了这个硬件 feature 之后，可以做到不修改虚拟机内核，代价是比 Xen 这样的 para-virtualization 稍微差一点，但是代码量小很多。
+
+目前，内核中的 kvm 就是利用了 Intel VT-x 和 AMD 的类似技术来实现的。它拥有更小的 LOC(Lines of Code)。在 Xen 中目前也已经支持了 para-virtualization 和 Intel VT-x 辅助的 full-virtualization 两种模式的虚拟机。
+
+简而言之，硬件的 feature 使得虚拟化的实现更加简单了。
