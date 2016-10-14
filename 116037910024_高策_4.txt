@@ -1,0 +1,50 @@
+# What are the differences between container and virtual machine?
+
+最大的区别在于，容器是运行在Host OS中的一个高度隔离的进程，容器与容器之间是共享Host OS的内核的，而虚拟机是通过对硬件的虚拟化，来实现复用。两个虚拟化手段是在不同层次上实现了虚拟化。
+
+所以容器是Process VM，传统的虚拟机，Xen之类的是System VM。通过共享内核，容器镜像会小很多，不过同样安全性就也会差一些。如果一个容器造成了内核Crash，其他容器也会跟着Crash。
+
+# What are the differences between LXC, Docker, Linux chroot and BSD jail?
+
+LXC是基于内核的cgroups和namespaces来进行隔离的一个容器化工具。
+
+而Docker在早期是使用LXC来作为其基础实现了它容器部分的功能，而除此之外Docker最大的不同在于其解决了一个软件build，ship，run全过程的问题，registry等等的实现使得镜像的分发变得容易了
+
+Linux chroot是容器概念的开始。它是一个UNIX操作系统上的系统调用，用于将一个进程及其子进程的根目录改变到文件系统中的一个新位置，让这些进程只能访问到该目录。这个功能的想法是为每个进程提供独立的磁盘空间。算是对磁盘的隔离工具。
+
+BSD jail是最早的容器技术之一，是一个类似chroot的操作系统级的系统调用，但是为文件系统、用户、网络等的隔离增加了进程沙盒功能。因此是功能完善的一个容器技术。
+
+从时间来看，1979年的Linux chroot是容器的开始，2000年的BSD jail是第一个成熟的容器技术，2008年的LXC利用了谷歌等公司贡献的内核feature，以简单的方式实现了一个完善的Linux容器管理工具。2013年的Docker则是通过解决了整个软件从构建到分发等的所有问题，因此使得容器技术大行其道。除此之外，还有很多变种，比如Hyper，rkt，Windows containers等，都各有优劣。
+
+# How many name spaces are there in containers?
+
+namespaces是Linux内核的一个feature，在内核中有7种namespace(From Linux Programmer's Manual, 2016-07-17)
+
+```
+Namespace   Constant          Isolates
+Cgroup      CLONE_NEWCGROUP   Cgroup root directory
+IPC         CLONE_NEWIPC      System V IPC, POSIX message queues
+Network     CLONE_NEWNET      Network devices, stacks, ports, etc.
+Mount       CLONE_NEWNS       Mount points
+PID         CLONE_NEWPID      Process IDs
+User        CLONE_NEWUSER     User and group IDs
+UTS         CLONE_NEWUTS      Hostname and NIS domain name
+```
+
+容器使用这个feature用来做资源的隔离。以Docker为例，正因为其使用了该feature，因此Docker在最开始只支持Linux作为其Host。
+
+# What are the relationship between Swarm, Kubernetes, Mesos and Fleet?
+
+这些都是随着Docker的流行而变得流行起来的容器编排和调度框架。
+
+在比较大的机器规模下，只有容器是没有意义的，需要一个框架来统一管理这些机器资源，来对容器进行编排与调度，这样的框架就是容器编排框架。
+
+Swarm是Docker公司开源的原生编排框架，跟Docker用着最原生的体验，在调度方面，它有着比较独特的地方，有三种调度策略，同时对机器节点和容器都有着类似Tag的设定，可以对其进行过滤。
+
+Kubernetes是谷歌开源的容器调度框架，谷歌从03年就开始使用容器技术，并为Linux内核贡献了cgroups和namespaces两个feature。谷歌最早的编排框架是Borg，并发表了论文Large-scale cluster management at Google with Borg，其后因为Borg越来越复杂，衍生了Omega项目，其使用了乐观的并发的调度机制，使得调度的性能变好了。而K8s是有感于Borg复杂度过高，而进行的一个开源实现，但是K8s到1.1版本之前都只能支持1000个机器节点，不算是Production Ready的一个框架。但是目前K8s正在积极地开发中，是非常活跃的开源项目。
+
+Mesos是由伯克利AMPLab研究开发的一个资源调度框架，而并非是专门用来调度容器的。Mesos的两层调度框架在当时是非常具有新意的，它不仅提高了调度的性能，而且也提供了一种在同一个集群上运行多个框架的思路。不过Mesos在自己的论文中有提到，它主要是解决短时任务的。在配合Marathon进行使用时，可以为Mesos提供容器长时间运行的支持。
+
+Fleet相对不是那么常用，跟之前的框架都不一样，它是一个分布式的init系统，结合了分布式一致性组件etcd和systemd，相当于集群级别的systemd。不过也可以实现在集群上部署容器的功能。
+
+目前，Marathon + Mesos是业界比较常用的容器编排框架，因为很多公司目前是虚拟机和容器并存的状态，因此其他框架比如Swarm，K8s等都做不到这一点。但是K8s是发展最快的框架，而且有谷歌在积极地进行开发与维护。Swarm的学习成本最低，因为与Docker的集成比较原生。Fleet相对不如前面三个常用，但是是一个不错的分布式Systemd工具。
