@@ -1,0 +1,25 @@
+# What are the features of Trust Zone?
+
+Trust Zone(TZ) 是 ARM 的一个针对消费电子提出的硬件架构，最大的 feature 是 TZ 在处理器上让每个物理核提供两个虚拟核，安全核和非安全核。他们分别运行在 Normal World 和 Secure World，两个 world 之间的切换是通过 monitor 模式来实现的。Monitor 会对上下文进行备份，然后进行 world 的跳转。这样两个世界运行在同一个核上，但是 Normal World 并不能访问到 Secure World 的资源。这样的感觉有点像是 VT-x 的 root mode 和 non-root mode。
+
+# If an attacker controls the kernel in normal world, and tries to modify the page table, will he success? why?
+
+这样的攻击是不会成功的。TZ-RKP 用到了类似 ExoKernel 对内存进行保护的技术。
+
+这里主要基于两点，第一点是内核不可能做到向 TZ-RKP 隐藏页表细节。因为对页表的使用都需要用到 TTBR 寄存器，而 TZ-RKP 会拦截对 TTBR 寄存器的操作。
+
+第二点是在内核中，页表是被置为只可读不可写的，而且所有的写操作都会 trap 到 TZ-RKP 中去处理。
+
+这两点保证了，就算攻击者控制了内核，也不能修改页表。
+
+# How to protect I/O data?
+
+不清楚 IO data 指的是什么，文章中并没有讲对传统 IO，网络、磁盘等等的保护，那从 保护 Kernel Data 和 DMA 请求两个方面来说一下
+
+首先是 Kernel Data，TZ-RKP 会防止把内核的数据映射到用户空间中，这样用户空间就不可以访问到内核数据，实现方式是往 Kernel 里加 Hook 代码，在分配内存的时候去进行记录，这样可以保证内核存放数据的地方都不会被映射到用户空间。
+
+然后是 DMA 请求方面，因为 TZ-RKP 对于所有可能修改系统状态的指令都不是在 Kernel 里去做的，而是用模拟的方式在 TZ-RKP 里执行，所以 DMA 请求没办法绕过 TZ-RKP 修改二进制或者是页表，因此也没有办法进行攻击。
+
+# Which attacks cannot be defended?
+
+提权相关的攻击，在特权模式下执行用户态的代码，这样的攻击是 TZ-RKP 不能防御的。这样的攻击会修改内核态的控制流，使得用户态的代码得以执行在内核态。相关比较经典的攻击有 Return-Oriented Programming(ROP) 等。 

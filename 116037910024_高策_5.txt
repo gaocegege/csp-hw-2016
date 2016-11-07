@@ -1,0 +1,23 @@
+# CloudVisor states that it separates security protection from resource management, could you find some examples (cases) in the paper? (hint: one case is swapping, another case is disk block)
+
+以硬盘为例。在虚拟机进行磁盘请求的时候，CloudVisor 并不会去模拟 IO 请求的逻辑，处理完再返回回去，这样的请求是归 VMM 去处理的，而 CloudVisor 只负责记录请求。也就是说请求会经过 CloudVisor 转发给 VMM 或者 VM，而 CloudVisor 本身只负责对 data 进行 Enc/Dec。所以有关 security protection 的事情，是由 CloudVisor 负责的，而真正的对 disk 的 resource management，是 VMM 做的。
+
+以内存为例。原本 VM 的内存是对 VMM 可见的，为了防止这样可能会导致的安全问题， CloudVisor 将 VMM 也放在了 Guest Mode 上，只有 CloudVisor 运行在 Host Mode 上。每当 VMM 想去写 VM 的 EPT 的时候，都会触发异常，这时候 CloudVisor 会检查内存页的所有权。这种模式很像是 ExoKernel 和 Xen 在内存隔离上的做法。这样只是把保护移到了 CloudVisor 里来做，但实际上的管理还是在 Xen 里去实现的，很巧妙。
+
+# If you are a client, how to ensure that a guest OS is actually running on CloudVisor? (through network)
+
+在运行之前，需要先把现有的镜像用工具加密并拿到 metadata file，随后就是要把这些发给 CloudVisor。
+
+作为一个客户端，第一件要做的事情就是确认将要使用的平台是不是运行在一个已知版本的 CloudVisor 上，之前的操作会把 CloudVisor 二进制的 SHA-1 放在 TPM 里，这个时候会用 TCG 的 attestation protocol 做校验。然后确定确实是运行在 CloudVisor 上的时候就会发送镜像和 metadata file 到 CloudVisor，CloudVisor 会用私钥解密然后启动虚拟机。
+
+这里面最关键的是 TCG 的 attestation protocol。
+
+# How does CloudVisor protect against malicious hardware reading guest’s memory through DMA?
+
+DMA 能够绕开 MMU，因此 CloudVisor 让受保护的内存区域不被使用 IOMMU 的 DMA 设备可达。在系统启动期间，CloudVisor 在 IOMMU 表中取消映射内存。当 VM 启动时，CloudVisor 也在 DMA 可行设备的 IOMMU 表中取消映射 VM 的内存。当 VM 关闭时，这些页被返回给 VMM，并且 CloudVisor 重新在IOMMU表中将这些页映射。当一个 DMA 请求被设置为存取 CloudVisor 或者 VM 的内存页，一个 IOMMU 错误就会发生，并且被 CloudVisor 处理，然后拒绝。
+
+# What is the process of a disk writing? (as many details as possible)
+
+首先，VM 发起了一个磁盘写的操作，VM-exit 到 CloudVisor，这个请求会被 CloudVisor 拿到，记录这个请求，之后会 VM-entry 到 VMM，VMM 拿到请求后，会把数据从 VM 中拷贝到缓冲区。接下来，会把对应的 hash 和 IV 放到相应的缓冲区去，随后，使用 IV 和 key 进行加密，加密后计算 hash，随后把 hash 和 IV 放到 metadata file 里。随后交给 VMM 中的 device 把加密后的数据写到 disk 里。
+
+过程中会有好多次 VM-entry 和 VM-exit。

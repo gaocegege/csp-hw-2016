@@ -1,0 +1,40 @@
+# What is the attack? Describe it in your own words.
+
+通过持续不断地激活内存中一个 row 的 wordline，相邻 row 里的一些 cell 的电荷会以更加快的速度泄露，然后就会导致内核中个别位的跳转。
+
+# How to leverage this attack? List as much as you can.
+
+首先，如果要利用，首先要了解这样的攻击是可以通过什么方式产生的。文章中对于此有详细的讲解，最核心的 idea 就是前面一题回答的。
+
+因为攻击是针对内存的，因此基本可以分为对 data 的攻击 和对 code，或者说对 control flow 的攻击。
+
+首先，对于 data 而言
+
+1. 破坏核心数据，使得系统不能正常工作
+2. 如果可以做到精确地知道被修改的 bit 具体是哪一位，那么不仅可以用来破坏，还可以用来重新构造数据，使得系统按照攻击者的意图工作。
+
+对于 control flow 而言
+
+1. 破坏控制流
+2. 绑架控制流
+3. 提权
+4. 破坏某些沙箱
+
+在这篇文章被提出后，有很多相关的攻击论文和分享。最出名的是在论文 Flip Feng Shui: Hammering a Needle
+in the Software Stack 被提到的，row hammer。它可以利用 bit flip 的问题和一些 feature，来 hack 掉 openSSH 和 GPG。
+
+在 us-15 black hat 上有人提出了这样的 bug 可以用来 hack Google 的 NaCl，甚至是用于 Linux 提权。
+
+除此之外，还有一些相关的研究和论文，都是结合了 bit flip 和一些其他的漏洞，实现一些更加有效的攻击。
+
+# How to mitigate such attack in hardware?
+
+1. 设计更好的内存，这个是硬件厂商可以做的
+2. 使用 ECC 模块和引入冗余的 DRAM
+3. 在 DRAM 被卖出去之前先检查所有的 cell，但是这样需要花费数天的时间，而且未必有足够来更换的 cell，可以由厂商来做，也可以由用户来做
+
+# How to mitigate such attack in software?
+
+1. 更加频繁地刷新 row
+2. 识别出 hot row，刷新周围的 row
+3. PARA
