@@ -1,0 +1,29 @@
+# What is ROP? What is a gadget？
+
+ROP 是一种从控制流来进行 Hack 的方法，是非常有趣的攻击方式。攻击者通过在现有的进程空间中寻找合法的，可以执行的代码片段，把他们组织起来进行攻击的一种方式。这种攻击需要依赖一个栈溢出的漏洞，和一些代码片段。理论上有了这些和足够大的堆栈空间，可以实现任何逻辑，而且很难被检查出来。
+
+Gadget 就是前面说的，零散的代码片段。它们有着一样的特征，就是他们最后都会以一个跳转来结束。
+
+# WHat is ASLR? How can they defend ROP?
+
+ASLR 是地址空间格局随机化，是操作系统和应用都需要支持的一个技术，是 Linux 的一个 feature，在 Windows 里叫做 DEP。它是指对堆、栈、共享库映射等线性区布局的随机化，原理是很简单的，但是非常有效，而且有很小的 overhead。它可以做到堆栈基地址会变化，进而导致内存中的变量会发生变化，而 ROP 是需要从固定的地址取 gadget 的，这样就会使得基于栈溢出的 ROP 攻击失效。通常来说，跟 stack canary 结合使用会更好一些。
+
+# What are the assumptions of ASLR? How can an attacker bypass ASLR?
+
+ASLR 希望攻击者找不到栈在哪里，这样就不能针对内存中的控制流进行攻击。而如果攻击者知道了任意一个指令在内存中的位置，它可以通过这一条指令的位置推出所有指令的位置，这样就可以完全绕过 ASLR。
+
+有很多研究者提出了很多通用的方法来绕过 ASLR，像Dion Blazakis的 JIT spray 和 tombkeeper 的 LdrHotPatchRoutine，但是都很快就被 fix 了。
+
+# Describe the process of hacking this paper shows.
+
+IPADS 学长刘宇涛的博文 http://ytliu.info/blog/2014/09/28/blind-return-oriented-programming-brop-attack-gong-ji-yuan-li/ 讲的很详细= =
+
+说详细要说像学长那么长，这里就总结下大致的流程。首先，攻击有两个前提：
+
+* 必须先存在一个已知的stack overflow的漏洞，而且攻击者知道如何触发这个漏洞
+* 服务器进程在crash之后会重新复活，并且复活的进程不会被re-rand（意味着虽然有ASLR的保护，但是复活的进程和之前的进程的地址随机化是一样的）
+
+第一步是 dump 内存，这样才能知道内存布局。在论文里是使用 write 系统调用来做的。攻击会先寻找可用的 gadget，这里运用了很巧妙的做法，就是先寻找 stop gadget，这样可以被看做是为了控制变量法，来知道哪些 useful gadget 不会引发系统 crash。找到后，组成一个 write 系统调用，把内存 dump 到远端
+
+然后就是分析内存，是传统的 ROP 套路了，整个过程中最重要的就是如何从远端利用 ROP 的方式把内存拿到。
+
