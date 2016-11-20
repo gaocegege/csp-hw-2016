@@ -1,0 +1,25 @@
+# What is the problem CFI targeting?
+
+CFI，Control Flow Integrity，是防止针对控制流的攻击的。更确切地说，是防止控制流被修改。比如之前的栈溢出攻击，等等通过挟持控制流，来达到执行未经允许的代码等等的攻击行为，都是 CFI 想解决的问题。
+
+# How does CFI solve the problem?
+
+CFI 最关键的地方在于要保证在程序执行的整个过程中，所有的控制流的转移，也就是跳转或者函数调用，都应该指向一个在编译前经过 CFG(Contrl Flow Graph) 验证过的合法的目标地址。而实现有很多，主要分为硬件和软件两种。但是思想都是一样的，首先会通过静态分析，构建出代码的 CFG，随后会根据 CFG 来给每一个代码段分配一个 ID，只有拥有 ID 的地方才是合格的跳转位置。而当控制流进行跳转的时候，只能跳转到合法的位置。
+
+硬件的实现非常简单，只需要支持两三个新的指令，label ID，call ID 等等。但是这样的做法需要 CPU 厂商的支持。
+
+软件的实现是相对而言比较复杂的。要对二进制的指令进行改写。在跳转处和目标位置处，都要增加一些用来检查的代码，因此会在跳转的时候有少量的 overhead。
+
+# Which applications are suitable to use CFI?
+
+* 非 CPU bound 的应用程序，比如具有频繁硬盘读写，或者内存操作，但是对 CPU 的使用很少的应用。
+* 跳转少的应用程序。因为在运行时，CFI 几乎所有的 overhead 都体现在跳转上。如果是跳转指令少的应用，可以尽量避免 overhead。
+* 需要保证控制流，对性能要求不是非常高的程序。
+
+# What are the disadvantages of CFI? Do you have any ideas to solve them?
+
+论文中的 CFI，有以下问题：
+
+* 在有较多跳转的代码中会有很大的 overhead，一方面因为跳转不可避免地引入了冗余的指令，另一方面也因为论文是通过软件方式来实现 CFI 的。
+
+文章中有提到一个解决方法，那就是用硬件的方式来实现，加指令，这样 overhead 会小一点
