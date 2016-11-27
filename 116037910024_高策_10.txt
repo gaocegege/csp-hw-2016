@@ -1,0 +1,44 @@
+# What is the problem TaintDroid tring to solve?
+
+TaintDroid 是一种在 Android 的实时 Taint Tracing 的实现，因此它想解决的问题与传统的 Taint Tracing 并无太大不同，只不过是放在了手机的环境上。它想解决的问题是 Android 上对于敏感数据的保护，并且希望可以通过 TraintDroid 可以知道有哪些应用访问了指定的敏感数据。
+
+# What is an implict flow? How can it leak privacy?
+
+Implict flow 是一个跟 control flow 有关的概念，又被叫做 implicit information flow，是指数据通过 control flow 被泄露。
+
+```
+var l, h
+if h = true then
+  l := 3
+else
+  l := 42
+```
+
+上面是一个例子，h 在控制流中的条件判断时被泄露了。如果 h 被 taint 了，其实还是可以根据 l 的值来猜测 h 的值，并没有完全做到保护，这样的做法是借助了 control flow 的 side channel。
+
+根据条件分支中的语句来猜测条件中变量的值，从而可能会导致信息的泄露，这就是 implicit flow 可能造成数据泄露的方式。
+
+# How does the taint propagate? How does it hurt perf?
+
+TaintDroid 的 taint propagate 主要分为四个部分，分别是
+
+1. VM 解释器解释的部分代码中的 propagation
+2. Native Code 的 propagation
+3. IPC 过程中的 propagation
+4. 文件存储的 propagation
+
+这分别对应着 variable, method, message, file 级别的 tracking。其中第一部分是最大头的，因为大部分应用代码都是在这里被解释执行的。因此 TaintDroid 制定了 16 条规则来分别阐述 taint propagation 的情形。
+
+而 Native Code 部分的 propagation 主要是分成了 internal JVM method 和 JNI method 来实现的。Native Code 并不会被 TaintDroid 监控，而是采取了一定的 human work 的方式来做的。
+
+IPC 的 propagation 是 false positive 的，一个 parcel 中的所有对象是一个 taint tag 的，这样的实现是为了防止攻击者通过其他方式解 parcel，但是同时也可能会造成一定程度的 taint explosion 问题。
+
+文件的 propagation 很简单，一个文件被置为一个 taint tag，在写的时候记录 tag，在读的时候做 taint 的 propagation。很简单的设计，同样有可能造成一定程度的 taint explosion 问题，会有误报，但是不影响大局。
+
+不同的 propagation 都对 runtime 或者 memory 有一些 overhead，比如 Native Code 的 propagation，就会有一定的内存 overhead，这些 overhead 通常都是来源于写 tag 和 taint propagation 上。
+
+# What is taint explosion? How does TaintDroid avoid it?
+
+Taint Explosion 是指 false positive 的策略导致了 taint 有时候会因为误报导致大规模的数据被标注为 taint 的现象。在文中第八章中有举了一个例子是关于此处的，是指 MMC, MNC 和 MSIN 同时被标注为 taint，而这些是被经常使用的数据，所以导致大批数据被错误地标注成了 taint。
+
+TaintDroid 为了避免这样的现象做了一些工作，但是还是不能完全避免的。因为之前在 X86 指令集来做 taint 的，所以如果栈指针，比如 esp, ebp 要是被标注成了 taint，那就会导致 taint explosion。因此，为了防止这样的事情发生，TaintDroid 没有在 指令级别来做 taint，而是在 Variable，Method 和 Message 级别来做的。但是 Message 级别来做还是有一定的问题的，有时候会因为粒度过大导致一定程度的 taint explosion 问题，但是文章中有提到说目前对于绝大多数情况是可适用的。
