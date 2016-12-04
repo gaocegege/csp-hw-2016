@@ -1,0 +1,10 @@
+# What is crash-consistency? Please give 3 examples on inconsistency when crash.
+
+
+
+# Whay sync() is needed to ensure consistency? Why order matters?
+
+# How many sync() are needed in previous implementation of FS(e.g., ext4)? How many in OFS? How does OFS make such optimization.
+
+# What is the tradeoff of OFS's optimization?
+
