@@ -1,10 +1,25 @@
 # What is crash-consistency? Please give 3 examples on inconsistency when crash.
 
+crash-inconsistency 是指文件系统在崩溃后，在恢复中不能将文件系统恢复到一种一致的状态。这种一致的状态主要是指 data 和 metadata 之间的一致。因为不一致会导致硬盘的某些空间可能不可用，因此 crash-inconsistency 是应该尽可能被避免的情况。
 
+Example:
+
+1. data 和 metadata 的写入没有按照顺序，在写入过程中 crash
+2. 先写了 commit block 再写 data，在写入过程中 crash 
+3. Journal 块不可访问
 
 # Whay sync() is needed to ensure consistency? Why order matters?
 
+因为数据的写入不单单涉及到数据本身，还会影响到 metadata，以及 commit block 的写入。因此各个环节的写入是有顺序的，否则的话就会造成 crash-inconsistency。这就是为什么 order 是重要的，它可以防止 crash-inconsistency 情况的发生。而为了实现 order，那就需要一个指令，来强制地把 buffer 中的数据来写入磁盘，这样文件系统才会确定 data, metadata 等等的写入是按照顺序进行的。
+
 # How many sync() are needed in previous implementation of FS(e.g., ext4)? How many in OFS? How does OFS make such optimization.
+
+在传统的 FS 里，一次数据的写入需要两次 flush，也就是 sync()，但是在 OFS 里，不需要任何的 sync() 操作。
+
+OFS 最主要的优化是由 checksums, delayed writes 和 Asynchronous Durability Notifications(ADN)。
+
+checksums 和 delayed writes 是最主要的用来去掉 flush 的方式，其中 checksums 是用来做 Jc 和 data, Jm 之间的 re-order detection 的，delayed writes 是用来防止 M 和 data, Jm, Jc 之间的 re-order 的。其中 delayed writes 实现方式就是用了 ADN。最后的效果就是整个 OFS 在写入的时候没有 flush。
 
 # What is the tradeoff of OFS's optimization?
 
+OFS 的优化使得它既得到了 performance，又得到了 crash consistency。但是牺牲的是数据的 freshness，也就是说在 crash 后，OFS 不一定能够保证系统的状态是最新的，可能是之前写入的状态，但是是一致的。OFS 就是牺牲了数据的 freshness 换来了 performance。
